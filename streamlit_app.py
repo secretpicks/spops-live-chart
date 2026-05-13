@@ -5,10 +5,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="SPOPS Live Signal Chart", page_icon="📈", layout="wide")
 
 TOKEN_ADDRESS = "EkDGB5fbPXiRmDDjxKcC7dFjzvFZj2KT9t7oeyyPx4SX"
-
-# Replace this with your GeckoTerminal Solana pool address for 1-year history.
-# Live Jupiter price works even if you leave this as-is.
-POOL_ADDRESS = "8LTRgxZ2KWDc2sDGuYAe5VtDgguAzteSeQUJisLQ5BVA"
+POOL_ADDRESS = "PASTE_GECKOTERMINAL_POOL_ADDRESS_HERE"
 
 html = f"""
 <!doctype html>
@@ -45,10 +42,10 @@ canvas {{ width:100%; height:540px; display:block; }}
   <div class="top">
     <div>
       <h1>SPOPS Live Signal Chart</h1>
-      <div class="sub">Jupiter live price · GeckoTerminal 1-year history · browser audio signals</div>
+      <div class="sub">Jupiter Quote live price · GeckoTerminal 1-year history · browser audio signals</div>
     </div>
     <div class="priceBox">
-      <div class="label">Current Jupiter Price</div>
+      <div class="label">Current Jupiter Quote Price</div>
       <div id="price">$0.00000000</div>
       <div id="status">Click Start to unlock audio.</div>
     </div>
@@ -80,9 +77,21 @@ canvas {{ width:100%; height:540px; display:block; }}
 </div>
 
 <script>
-const TOKEN_ADDRESS = """ + json.dumps(TOKEN_ADDRESS) + """;
-const POOL_ADDRESS = """ + json.dumps(POOL_ADDRESS) + """;
-const JUPITER_PRICE_URL = "https://lite-api.jup.ag/price/v3?ids=" + TOKEN_ADDRESS;
+const TOKEN_ADDRESS = {json.dumps(TOKEN_ADDRESS)};
+const POOL_ADDRESS = {json.dumps(POOL_ADDRESS)};
+
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const ONE_SPOPS_AMOUNT = "100000000"; // 1 SPOPS with 8 decimals
+
+const JUPITER_QUOTE_URL =
+  "https://quote-api.jup.ag/v6/quote?inputMint=" +
+  TOKEN_ADDRESS +
+  "&outputMint=" +
+  USDC_MINT +
+  "&amount=" +
+  ONE_SPOPS_AMOUNT +
+  "&slippageBps=50";
+
 const HISTORY_URL = "https://api.geckoterminal.com/api/v2/networks/solana/pools/" + POOL_ADDRESS + "/ohlcv/day?aggregate=1&limit=365";
 const FETCH_INTERVAL_MS = 5000;
 const PRICE_MOVEMENT_THRESHOLD = 1e-8;
@@ -149,27 +158,26 @@ function updateMetrics(price){
   setMetric("y1",pct(price,baselineFor(31536000)));
   setMetric("all",pct(price,baselineFor(null)));
 }
+
 async function fetchJupiterPrice(){
-  const res=await fetch(JUPITER_PRICE_URL,{headers:{"Accept":"application/json"}});
-  if(!res.ok) throw new Error("Jupiter returned "+res.status);
-  const data=await res.json();
-  const row=data[TOKEN_ADDRESS];
-  if(!row) throw new Error("Jupiter returned no price for token.");
-  const p=parseFloat(row.usdPrice ?? row.price ?? row.usd_price ?? row.value);
-  if(!Number.isFinite(p)) throw new Error("Jupiter price was not readable.");
-  return p;
+  const res = await fetch(JUPITER_QUOTE_URL, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error("Jupiter quote returned " + res.status);
+
+  const data = await res.json();
+  if (!data.outAmount) throw new Error("Jupiter returned no quote.");
+
+  const usdcReceived = parseFloat(data.outAmount) / 1000000; // USDC has 6 decimals
+  return usdcReceived; // quoted exactly 1 SPOPS
 }
+
 async function fetchHistory(){
-  if(!POOL_ADDRESS || POOL_ADDRESS.includes("PASTE_")){
-    throw new Error("Add your GeckoTerminal pool address in streamlit_app.py first.");
-  }
+  if(!POOL_ADDRESS || POOL_ADDRESS.includes("PASTE_")) throw new Error("Add your GeckoTerminal pool address in streamlit_app.py first.");
   const res=await fetch(HISTORY_URL,{headers:{"Accept":"application/json"}});
   if(!res.ok) throw new Error("GeckoTerminal returned "+res.status);
   const data=await res.json();
   const list=data?.data?.attributes?.ohlcv_list;
   if(!Array.isArray(list) || list.length===0) throw new Error("No historical candles returned.");
-  historicalPoints=list.map(x=>({t:new Date(x[0]*1000),open:+x[1],high:+x[2],low:+x[3],close:+x[4],volume:+x[5]}))
-                       .filter(x=>Number.isFinite(x.close)).reverse();
+  historicalPoints=list.map(x=>({t:new Date(x[0]*1000),close:+x[4]})).filter(x=>Number.isFinite(x.close)).reverse();
   if(historicalPoints.length>1){
     const first=historicalPoints[0].close, last=historicalPoints[historicalPoints.length-1].close;
     setMetric("y1",pct(last,first)); setMetric("all",pct(last,first));
@@ -196,10 +204,9 @@ function drawGrid(w,h,padL,padR,padT,padB,minP,maxP){
 function drawLiveChart(){
   resizeCanvas(); const w=canvas.clientWidth,h=canvas.clientHeight,padL=76,padR=30,padT=34,padB=54;
   ctx.clearRect(0,0,w,h); ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-  if(prices.length<1){ drawEmpty("Waiting for live Jupiter price data…"); return; }
+  if(prices.length<1){ drawEmpty("Waiting for live Jupiter quote data…"); return; }
   const current=times[times.length-1], windowStart=Math.max(0,current-300);
   const pts=[]; for(let i=0;i<prices.length;i++){ if(times[i]>=windowStart) pts.push({t:times[i],p:prices[i]}); }
-  if(pts.length<1){ drawEmpty("Waiting for live chart points…"); return; }
   let minP=Math.min(...pts.map(x=>x.p)), maxP=Math.max(...pts.map(x=>x.p));
   if(minP===maxP){ minP*=0.995; maxP*=1.005; } else { const r=maxP-minP; minP-=r*.07; maxP+=r*.07; }
   const plotW=w-padL-padR, plotH=h-padT-padB;
@@ -213,7 +220,7 @@ function drawLiveChart(){
     const last=pts[pts.length-1]; ctx.fillStyle="#0033A0"; ctx.beginPath(); ctx.arc(xScale(last.t),yScale(last.p),4,0,Math.PI*2); ctx.fill();
   }
   ctx.fillStyle="#111"; ctx.font="bold 16px Helvetica, Arial"; ctx.textAlign="left";
-  ctx.fillText("Live Jupiter: "+formatPrice(prices[prices.length-1]),padL,padT-10);
+  ctx.fillText("Live Jupiter Quote: "+formatPrice(prices[prices.length-1]),padL,padT-10);
   ctx.fillStyle="#667085"; ctx.font="12px Helvetica, Arial"; ctx.textAlign="center"; ctx.fillText("Live view: last 5 minutes",padL+plotW/2,h-18);
 }
 function drawHistoryChart(){
@@ -233,7 +240,7 @@ function drawHistoryChart(){
   ctx.fillStyle="#111"; ctx.font="bold 16px Helvetica, Arial"; ctx.textAlign="left";
   ctx.fillText("1 Year History: "+formatPrice(first.close)+" → "+formatPrice(last.close),padL,padT-10);
   ctx.fillStyle="#667085"; ctx.font="12px Helvetica, Arial"; ctx.textAlign="center";
-  ctx.fillText("GeckoTerminal daily OHLCV · last available 365 days",padL+plotW/2,h-18);
+  ctx.fillText("GeckoTerminal daily OHLCV",padL+plotW/2,h-18);
 }
 function drawChart(){ chartMode==="history" ? drawHistoryChart() : drawLiveChart(); }
 async function tick(){
@@ -243,7 +250,7 @@ async function tick(){
     const nowSec=(Date.now()-startTime)/1000;
     prices.push(price); times.push(nowSec);
     priceEl.innerText=formatPrice(price);
-    statusEl.innerText="Live · Jupiter price source · audio unlocked";
+    statusEl.innerText="Live · Jupiter Quote source · audio unlocked";
     lastUpdateEl.innerText="Last live update: "+new Date().toLocaleTimeString();
     if(lastPrice!==null){
       const delta=price-lastPrice;
@@ -253,11 +260,11 @@ async function tick(){
       if(bullishCounter>=3){ playBoom(); bullishCounter=0; }
     }
     lastPrice=price; updateMetrics(price); if(chartMode==="live") drawLiveChart();
-  } catch(e){ statusEl.innerHTML="<span class='error'>Live price error:</span> "+e.message; }
+  } catch(e){ statusEl.innerHTML="<span class='error'>Live quote error:</span> "+e.message; }
 }
 function start(){
   ensureAudio(); running=true; startTime=Date.now(); if(timer) clearInterval(timer);
-  chartMode="live"; modeLabelEl.innerText="Mode: Live chart"; statusEl.innerText="Starting Jupiter live feed…";
+  chartMode="live"; modeLabelEl.innerText="Mode: Live chart"; statusEl.innerText="Starting Jupiter quote feed…";
   tick(); timer=setInterval(tick,FETCH_INTERVAL_MS);
 }
 function stop(){ running=false; if(timer) clearInterval(timer); timer=null; statusEl.innerText="Stopped."; }
@@ -275,5 +282,5 @@ resizeCanvas(); drawEmpty("Click Start Live Chart + Unlock Audio. Then click Loa
 </body>
 </html>
 """
-
 components.html(html, height=920, scrolling=True)
+
