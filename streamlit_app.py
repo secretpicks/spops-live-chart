@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="SPOPS Live Signal Chart", page_icon="📈", layout="wide")
 
 TOKEN_ADDRESS = "EkDGB5fbPXiRmDDjxKcC7dFjzvFZj2KT9t7oeyyPx4SX"
-POOL_ADDRESS = "PASTE_GECKOTERMINAL_POOL_ADDRESS_HERE"
+POOL_ADDRESS = "8LTRgxZ2KWDc2sDGuYAe5VtDgguAzteSeQUJisLQ5BVA"
 
 html = f"""
 <!doctype html>
@@ -93,7 +93,7 @@ const JUPITER_QUOTE_URL =
   "&slippageBps=50";
 
 const HISTORY_URL = "https://api.geckoterminal.com/api/v2/networks/solana/pools/" + POOL_ADDRESS + "/ohlcv/day?aggregate=1&limit=365";
-const FETCH_INTERVAL_MS = 5000;
+const FETCH_INTERVAL_MS = 1000;
 const PRICE_MOVEMENT_THRESHOLD = 1e-8;
 
 let running=false, timer=null, audioCtx=null, chartMode="live";
