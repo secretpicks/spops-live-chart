@@ -5,9 +5,9 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="SPOPS Live Signal Chart", page_icon="📈", layout="wide")
 
 TOKEN_ADDRESS = "EkDGB5fbPXiRmDDjxKcC7dFjzvFZj2KT9t7oeyyPx4SX"
-POOL_ADDRESS = "8LTRgxZ2KWDc2sDGuYAe5VtDgguAzteSeQUJisLQ5BVA"
+POOL_ADDRESS = "PASTE_GECKOTERMINAL_POOL_ADDRESS_HERE"
 
-html = f"""
+html = """
 <!doctype html>
 <html>
 <head>
